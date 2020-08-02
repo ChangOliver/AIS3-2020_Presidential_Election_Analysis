@@ -9,4 +9,4 @@ Data are converted to csv first and reconstructed to desired format with *constr
 The resulting data can be found in Releases.
 
 ## Analysis
-The code used for analysis are presented in PTT.Rmd, the respective results can be seen in the imgs folder or on our [website](https://www.csie.ntu.edu.tw/~b06902119/AIS3/AIS3.html).
+The code used for analysis are presented in *PTT.Rmd*, the respective results can be seen in the imgs folder or on our [website](https://www.csie.ntu.edu.tw/~b06902119/AIS3/AIS3.html).
