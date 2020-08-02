@@ -12,7 +12,7 @@ library(tibble)
 args <- commandArgs(trailingOnly = TRUE)
 date <- args[[1]]
 
-#這邊改input file
+#input file
 posts <- read_csv(paste0("./data/hatePolictic_csv/2019-12/2019-12-", date, ".jsonl.csv"))
 #posts <- posts[, colSums(is.na(posts)) != nrow(posts)]
 #posts <- posts[rowSums(is.na(posts)) != ncol(posts), ]
@@ -53,7 +53,7 @@ for (j in 1:row_num){
 
 comments_reconstructt <- comments_reconstruct[2:nrow(comments_reconstruct), ]
 
-#這邊改output file
+#output file
 write.csv(comments_reconstructt, file=past0("./data/2019-12/2019-12-", date, "_comment.csv"))
 write.csv(content, file=paste0("./data/2019-12/2019-12-", date, "_content.csv"))
 
