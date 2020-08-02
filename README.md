@@ -1,4 +1,11 @@
 # AIS3 PTT Analysis
+
+## Introduction
+Topic : 從2020總統大選洞悉PTT輿論生態 (Analyze public opinion regarding 2020 presendential election on PTT)  
+Aim: 
+1. Identify PTT users who has potential affecting election result.
+2. Identify PTT users who aren't regular users, but are cyber warriors who aim to alter election result deliberately.
+
 This is a 3-day mini hackathon.
 
 ## Data Preparation
