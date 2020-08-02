@@ -1,0 +1,356 @@
+---
+title: 從2020總統大選洞悉PTT輿論生態
+author: 國家安全第五組
+output: 
+  html_notebook:
+    toc: true
+    toc_float: true
+    smooth_scroll: true
+    theme: spacelab
+date: Aug 1, 2020
+---
+
+# 系統設置
+### 安裝需要的packages
+```{r message=FALSE, warning=FALSE}
+packages = c("readr", "dplyr", "jiebaR", "tidyr", "tidytext", "igraph", "topicmodels", "ggplot2", "stringr")
+existing = as.character(installed.packages()[,1])
+for(pkg in packages[!(packages %in% existing)]) install.packages(pkg)
+```
+
+### 載入packages
+```{r message=FALSE, warning=FALSE}
+library(readr)
+library(dplyr)
+library(jiebaR)
+library(tidyr)
+library(tidytext)
+library(igraph)
+library(topicmodels)
+library(stringr)
+library(ggplot2)
+library(tibble)
+library(ggrepel)
+```
+
+# 讀取資料
+
+### 載入12月PTT政黑版資料
+```{r message=FALSE, warning=FALSE}
+# 文章資料
+posts <- read_csv("./data/12_content.csv")
+posts
+```
+
+
+```{r message=FALSE, warning=FALSE}
+# 回覆資料
+reviews <- read_csv("./data/12_comment.csv")
+reviews
+```
+
+```{r}
+# 選取需要的欄位
+reviews <- reviews %>%
+      select(canonical_url, commenter, reaction, text)
+reviews
+```
+
+# 資料預覽
+```{r}
+posts$date <- as.Date(posts$date)
+
+posts %>% 
+  group_by(date) %>%
+  summarise(count = n()) %>%
+  ggplot(aes(date,count)) +
+    geom_line(color="blue", size=1) +
+    theme_classic()
+```
+
+### 發文者數量
+```{r}
+length(unique(posts$poster))
+```
+
+### 回覆者數量
+```{r}
+length(unique(reviews$commenter))
+```
+
+### 總共有參與的人數
+```{r}
+allPoster <- c(posts$poster, reviews$commenter)
+length(unique(allPoster))
+```
+
+### 整理所有參與人
+```{r}
+# 整理所有出現過得使用者
+# 如果它曾發過文的話就標註他爲poster
+# 如果沒有發過文的話則標註他爲replyer
+userList <- data.frame(user=unique(allPoster)) %>%
+              mutate(type=ifelse(user%in%posts$poster, "poster", "replyer"))
+
+userList["user"]<-apply(userList["user"], 1:length(userList["user"]), function(x) gsub(" .*","", x))
+userList
+```
+
+# 建立社群網路圖
+### 將原文與回覆Join起來
+```{r message = FALSE, warning=FALSE}
+# 把原文與回覆依據url innerJoin起來，這邊也可以直接讀之前join的檔案
+#posts_Reviews <- read_csv("./post_review.csv") 
+posts_Reviews <- merge(x = posts, y = reviews, by = c("canonical_url"))
+posts_Reviews
+```
+
+### 篩選欄位
+```{r}
+# 取出 commenter(回覆者)、poster(發文者)、canonical_url(文章連結) 、title.x 四個欄位
+link <- posts_Reviews %>%
+      select(commenter,poster, canonical_url, title.x)
+link
+```
+
+### 建立網路關係
+```{r}
+reviewNetwork <- graph_from_data_frame(d=link, directed=F)
+reviewNetwork
+```
+
+### 調整參數並繪製網路圖
+```{r message = FALSE, warning=FALSE}
+# 調整點點的大小和線的粗細，並不顯示使用者賬號。
+# 點太多邊太密，必須要篩選資料，這邊就先不畫圖，反正也看不出什麼
+set.seed(487)
+labels <- degree(reviewNetwork)
+V(reviewNetwork)$label <- names(labels)
+
+V(reviewNetwork)$color <- ifelse(V(reviewNetwork)$type=="poster", "gold", "blue")
+
+#plot(reviewNetwork, vertex.size=2, edge.arrow.size=.2, vertex.label = NA)
+```
+
+# 資料篩選
+### 挑出ㄧ天的文章和它的回覆
+```{r}
+link <- posts_Reviews[posts_Reviews$date.x == as.Date("2019-12-04"), ]
+link["poster"]<-apply(link["poster"], 1:length(link["poster"]), function(x) gsub(" .*","", x))
+link["commenter"]<-apply(link["commenter"], 1:length(link["commenter"]), function(x) gsub(" .*","", x))
+link <- select(link, commenter, poster, canonical_url) %>% unique()
+link
+```
+
+### 過濾圖中的點(v)
+```{r}
+# 這邊要篩選link中有出現的使用者
+# 因爲如果userList（igraph中graph_from_data_frame的v參數吃的那個東西）中出現了沒有在link中出現的使用者也會被igraph畫上去，圖片就會變得沒有意義
+filtered_user <- userList %>%
+          filter(user%in%link$commenter | user%in%link$poster) %>%
+          arrange(desc(type)) %>% unique()
+filtered_user
+```
+
+```{r}
+# 為了觀察方便及找出活躍鄉民，先移除互動量小於200的用戶
+reviewNetwork <- graph_from_data_frame(d=link, v=filtered_user, directed=T)
+reviewNetwork <- delete.vertices(reviewNetwork, V(reviewNetwork)[ degree(reviewNetwork) < 200])
+reviewNetwork
+```
+
+```{r}
+# 繪圖
+set.seed(487)
+labels <- degree(reviewNetwork)
+V(reviewNetwork)$label <- names(labels)
+
+V(reviewNetwork)$color <- ifelse(V(reviewNetwork)$type=="poster", "gold", "blue")
+
+plot(reviewNetwork, vertex.size=8, edge.arrow.size=.4, vertex.label=V(reviewNetwork)$label, vertex.label.font=2)
+
+legend("bottomright", c("author","reviewer"), pch=21,
+  col="#777777", pt.bg=c("gold","blue"), pt.cex=1, cex=1)
+```
+
+> 我們可以看到基本的使用者關係，但是我們希望能夠將更進階的資訊視覺化。<br>
+例如：使用者經常參與的文章種類，或是使用者在該社群網路中是否受到歡迎。
+
+
+# 主題分類
+
+### 前處理
+```{r}
+# 文章斷句
+ptt_meta <- posts %>%
+              mutate(sentence=gsub("[\n]{2,}", "。", text))
+# 以全形或半形 驚歎號、問號、分號 以及 全形句號 爲依據進行斷句
+ptt_sentences <- strsplit(ptt_meta$sentence,"[。！；？!?;]")
+# 將每句句子，與他所屬的文章連結配對起來，整理成一個dataframe
+ptt_sentences <- data.frame(
+                        artUrl = rep(ptt_meta$canonical_url, sapply(ptt_sentences, length)), 
+                        sentence = unlist(ptt_sentences)
+                      ) %>%
+                      filter(!str_detect(sentence, regex("^(\t|\n| )*$")))
+ptt_sentences$sentence <- as.character(ptt_sentences$sentence)
+ptt_sentences
+```
+
+```{r message = FALSE, warning=FALSE, echo=FALSE}
+## 文章斷詞
+# load hate_lexicon
+hate_lexicon <- scan(file = "./dict/hate_lexicon.txt", what=character(),sep='\n', 
+                   encoding='utf-8',fileEncoding='utf-8')
+# load stop words
+stop_words <- scan(file = "./dict/stop_words.txt", what=character(),sep='\n', 
+                   encoding='utf-8',fileEncoding='utf-8')
+# 使用默認參數初始化一個斷詞引擎
+jieba_tokenizer = worker()
+# 使用口罩字典重新斷詞
+new_user_word(jieba_tokenizer, c(hate_lexicon))
+# tokenize function
+chi_tokenizer <- function(t) {
+  lapply(t, function(x) {
+    if(nchar(x)>1){
+      tokens <- segment(x, jieba_tokenizer)
+      tokens <- tokens[!tokens %in% stop_words]
+      # 去掉字串長度爲1的詞彙
+      tokens <- tokens[nchar(tokens)>1]
+      return(tokens)
+    }
+  })
+}
+tokens <- ptt_sentences %>%
+  unnest_tokens(word, sentence, token="ngrams", n = 1) %>%
+  filter(!str_detect(word, regex("[0-9a-zA-Z]"))) %>%
+  count(artUrl, word) %>%
+  rename(count=n)
+tokens
+```
+
+```{r}
+## 清理斷詞結果
+# 挑出總出現次數大於3的字
+reserved_word <- tokens %>% 
+  group_by(word) %>% 
+  count() %>% 
+  filter(n > 3) %>% 
+  unlist()
+
+ptt_removed <- tokens %>% 
+  filter(word %in% reserved_word)
+
+ptt_dtm <- ptt_removed %>% cast_dtm(artUrl, word, count)
+ptt_dtm
+```
+
+### LDA 主題分析
+```{r}
+# LDA分主題
+rowTotals <- apply(ptt_dtm , 1, sum) #Find the sum of words in each Document
+ptt_dtm <- ptt_dtm[rowTotals> 0, ]
+
+ptt_lda <- LDA(ptt_dtm, k = 6, control = list(seed = 1000))
+# 看各群的常用詞彙
+tidy(ptt_lda, matrix = "beta") %>%
+  group_by(topic) %>%
+  top_n(10, beta) %>%
+  ungroup() %>%
+  mutate(topic = as.factor(topic),
+         term = reorder_within(term, beta, topic)) %>%
+  ggplot(aes(term, beta, fill = topic)) +
+  geom_col(show.legend = FALSE) +
+  theme(text = element_text(family = 'TW-Kai')) +
+  facet_wrap(~ topic, scales = "free") +
+  coord_flip() +
+  scale_x_reordered()
+```
+
+
+```{r}
+# 使用LDA預測每篇文章的主題
+# 在tidy function中使用參數"gamma"來取得 theta矩陣。
+ptt_topics <- tidy(ptt_lda, matrix="gamma") %>% 
+                  group_by(document) %>%
+                  top_n(1, wt=gamma)
+ptt_topics
+```
+
+
+### LDA主題進行視覺化
+```{r}
+# 把文章資訊和主題join起來
+posts_Reviews <- merge(x = posts_Reviews, y = ptt_topics, by.x = "canonical_url", by.y="document")
+posts_Reviews
+```
+
+```{r}
+# 挑選出2019/12的文章，
+# 篩選有在15篇以上文章回覆者，
+# 欄位只取：commenter(評論者), poster(發文者), canonical_url(文章連結), title.x(主題), reaction（推噓）
+link <- posts_Reviews %>%
+      filter(reaction !="→") %>%
+      group_by(commenter, canonical_url) %>% 
+      filter(n()>15) %>% 
+      ungroup() %>% 
+      filter(topic == 1 | topic == 6) %>% 
+      select(commenter, poster, canonical_url, title.x, reaction) %>% 
+      unique()
+
+link["poster"]<-apply(link["poster"], 1:length(link["poster"]), function(x) gsub(" .*","", x))
+link["commenter"]<-apply(link["commenter"], 1:length(link["commenter"]), function(x) gsub(" .*","", x))
+link <- unique(link)
+link
+```
+
+```{r}
+# 篩選link中有出現的使用者
+
+filtered_user <- userList %>%
+          filter(user%in%link$commenter | user%in%link$poster) %>%
+          arrange(desc(type)) %>% unique()
+
+filtered_user["user"] <- apply(filtered_user["user"], 1:length(filtered_user["user"]), function(x) gsub(" .*","", x))
+filtered_user <- unique(filtered_user)
+filtered_user
+```
+
+```{r}
+# 建立網路關係
+reviewNetwork <- graph_from_data_frame(d=link, v=filtered_user, directed=T)
+
+# 刪除degree < 10 的用戶
+reviewNetwork <- delete.vertices(reviewNetwork, V(reviewNetwork)[ degree(reviewNetwork) < 10])
+
+# 依據使用者身份對點進行上色
+labels <- degree(reviewNetwork)
+V(reviewNetwork)$label <- names(labels)
+V(reviewNetwork)$color <- ifelse(V(reviewNetwork)$type=="poster", "gold", "lightblue")
+
+# 依據使用者反應對邊進行上色
+E(reviewNetwork)$color <- ifelse(E(reviewNetwork)$reaction == "推", "lightgreen", "palevioletred")
+
+# 畫出社群網路圖
+set.seed(5431)
+plot(reviewNetwork, vertex.size=5, edge.arrow.size=.2, edge.width=.4,
+     vertex.label= NA, vertex.label.font=2)
+
+# 加入標示
+legend("bottomright", c("author","reviewer"), pch=21,
+  col="#777777", pt.bg=c("gold","lightblue"), pt.cex=1, cex=1)
+legend("topleft", c("Like","Boo"), 
+       col=c("lightgreen","palevioletred"), lty=1, cex=1)
+```
+
+```{r}
+# 畫出社群網路圖，同上，只是有label
+set.seed(5431)
+plot(reviewNetwork, vertex.size=5, edge.arrow.size=.2, edge.width=.4,
+     vertex.label= ifelse(degree(reviewNetwork) > 20, V(reviewNetwork)$label, NA), vertex.label.font=2)
+
+# 加入標示
+legend("bottomright", c("author","reviewer"), pch=21,
+  col="#777777", pt.bg=c("gold","lightblue"), pt.cex=1, cex=1)
+legend("topleft", c("Like","Boo"), 
+       col=c("lightgreen","palevioletred"), lty=1, cex=1)
+```
