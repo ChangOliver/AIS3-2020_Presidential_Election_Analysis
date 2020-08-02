@@ -7,4 +7,4 @@ The data are originallly fetched from [0archive's](https://g0v.hackmd.io/@chihao
 Data are converted to csv first and reconstructed to desired format with *construct.R*, with each daily data split into content and comment. All dates are then merge into monthly data with *merge.R*, also separated by content and comment.
 
 ## Analysis
-The code used for analysis are presented in PTT.Rmd, the respective results can be seen in the imgs folder or on our [website](https://www.csie.ntu.edu.tw/~b06902119/AIS3.html).
+The code used for analysis are presented in PTT.Rmd, the respective results can be seen in the imgs folder or on our [website](https://www.csie.ntu.edu.tw/~b06902119/AIS3/AIS3.html).
